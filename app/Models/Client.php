@@ -3,12 +3,14 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+require __DIR__ . "/../../vendor/autoload.php";
+
 use PDO;
 
 class Client
 {
     private PDO $conn;
-    private static string $table = 'client';
+    private static string $table = 'users';
 
     public function __construct(PDO $conn)
     {
@@ -23,20 +25,12 @@ class Client
         return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 
-    public function getByEmail(string $email): ?array
+    public function show(): array
     {
-        $query = "SELECT * FROM lavanderia_app." . self::$table . " WHERE email = ?";
-        $stmt = $this->conn->prepare($query);
-        $stmt->execute([$email]);
-        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
-    }
-
-    public function getAll(): array
-    {
-        $query = "SELECT * FROM lavanderia_app." . self::$table;
+        $query = 'SELECT * FROM lavanderia_app.%s' . self::$table;
         $stmt = $this->conn->prepare($query);
         $stmt->execute();
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        return $stmt->fetchAll();
     }
 
     public function register(array $data): int

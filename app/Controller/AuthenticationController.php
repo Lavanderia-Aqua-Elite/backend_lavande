@@ -10,12 +10,12 @@ require __DIR__ . "/../../vendor/autoload.php";
 use Slim\Psr7\Request;
 use Slim\Psr7\Response;
 use Firebase\JWT\JWT;
-use PDOException;
 use Slim\Exception\HttpNotFoundException;
 
 //clases:
 use App\Validator\Validator;
 use App\Models\Client;
+use Slim\Exception\HttpException;
 
 class AuthenticationController
 {
@@ -85,7 +85,7 @@ class AuthenticationController
             ]));
             return $response->withHeader("Content-Type", "application/json");
         } 
-        catch(HttpNotFoundException $e) 
+        catch(HttpException $e) 
         {
             $response->getBody()->write(json_encode([
                 "message" => $e->getMessage(),
@@ -105,21 +105,22 @@ class AuthenticationController
 
             if(!empty($validate->validateGump($data))) {
                 $response->getBody()->write(json_encode([
-                    "message" => "",
+                    "message" => "No pasaron los datos",
                     "status" => 400
                 ]));
                 return $response->withHeader("Content-Type", "application/json")->withStatus(400);
-            }
+            }       
 
             $stmt = $this->clientModel->register($data);
 
             $response->getBody()->write(json_encode([
                 "message" => "cliente registrado",
+                "data" => $stmt, 
                 "status" => 201
             ]));
             return $response->withHeader("Content-Type", "application/json")->withStatus(201);
         } 
-        catch(HttpNotFoundException $e) 
+        catch(HttpException $e) 
         {
             $response->getBody()->write(json_encode([
                 "message" => $e->getMessage(),
