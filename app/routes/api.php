@@ -1,12 +1,18 @@
 <?php
-//Class:
-use App\Controller\AuthenticationController;
+//Controller:
+use App\Controller\AuthenticationController as Auth;
 use App\Controller\UsersController as Users;
+
+//Middleware:
+use app\Middleware\AuthenticationControllerMiddleware; #Validar autenticacion del usuario
 
 return function ($app) {
     // POST
-    $app->post('/register', AuthenticationController::class . ':register');
+    $app->post('/register', Auth::class . ':register');
+    $app->post('/login', Auth::class . ':login');
     
     // GET
-    $app->get('/show', Users::class . ':show');
+    $app->group('/', function($group) {
+        $group->get('/show', Users::class . ':show');
+    });
 };

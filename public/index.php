@@ -33,7 +33,7 @@ $dbConnection = DatabaseConnection::getInstance($app);
 $conn = $dbConnection->getConnection();
 $clientModels = new Client($conn);
 
-(require __DIR__ . '/../app/Routes/api.php')($app);
+(require __DIR__ . '/../app/routes/api.php')($app);
 
 $app->addErrorMiddleware(true, true, true);
 
