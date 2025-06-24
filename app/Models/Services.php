@@ -3,9 +3,6 @@ declare(strict_types=1);
 
 namespace app\Models;
 
-use Psr\Http\Message\ResponseInterface as Response;
-use Psr\Container\NotFoundExceptionInterface;
-
 //PDO
 use PDO;
 
@@ -56,41 +53,16 @@ class Services
         }
     }
 
-    public function insert(Response $response, array $data): Response
+    public function insert(array $data): int
     {
-        if(
-               !empty($data["name_s"])
-            || !empty($data["price_s"])
-            || !empty($data["description_s"])
-        ) {
-            $response->getBody()->write(json_encode([
-                "message" => "Parameters are not passing",
-                "status" => 400
-            ]));
-            return $response->withHeader("Content-Type", "appliaction/json")->withStatus(400);
-        }
-        
-        try {
-            $sql = "INSERT INTO lavanderia_app." . self::$table . " (name_s, price_s, image_s, description_s)
-                VALUES (:name, :price, :image, :description)";
-            $stmt = $this->conn->prepare($sql);
-            $stmt->execute([
-                $data["name_s"],
-                $data["price_s"],
-                $data["description_s"]
-            ]);
-            $response->getBody()->write(json_encode([
-                "message" => "successfully registered service",
-                "status" => 201
-            ]));
-            return $response->withHeader("Content-Type", "appliaction/json")->withStatus(201);
-        }
-        catch(NotFoundExceptionInterface $e) {
-            $response->getBody()->write(json_encode([
-                "message" => $e->getMessage(),
-                "status" => 500
-            ]));
-            return $response->withHeader("Content-Type", "appliaction/json")->withStatus(500);
-        }
+        $sql = "INSERT INTO lavanderia_app." . self::$table . " (name_s, price_s, image_s, description_s)
+            VALUES (?, ?, ?, ?)";
+        $stmt = $this->conn->prepare($sql);
+        $stmt->execute([
+            $data["name_s"],
+            $data["price_s"],
+            $data["description_s"]
+        ]);
+        return (int)$this->conn->lastInsertId();
     }
 }
