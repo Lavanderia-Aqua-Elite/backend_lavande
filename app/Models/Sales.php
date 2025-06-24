@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace app\Models;
 
 use PDO;
+use app\api\Paypal;
 use Psr\Http\Message\ResponseInterface as Response;
 
 class Sales
