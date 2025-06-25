@@ -3,18 +3,52 @@ declare(strict_types=1);
 
 namespace app\api\Paypal;
 
-$paypal = curl_init();
+require __DIR__ . "/../../../vendor/autoload.php";
 
-if($paypal === CURLE_OK) {
-    curl_setopt($paypal, CURLOPT_URL, "https://api-m.sandbox.paypal.com/v1/oauth2/token");
-    curl_setopt($paypal, CURLOPT_HEADER, 0);
+class PaypalAPI
+{
+    private $clientID;
+    private $secret;
+    private $url;
 
+    public function __construct()
+    {
+        $this->url = $_ENV["API_URL_PAYPAL"];
+        $this->clientID = $_ENV["KEY_PAYPAL_CLIENT_ID"];
+        $this->secret = $_ENV["KEY_PAYPAL_CLIENT_SECRET"];
+    }
+
+    /*
+        @param string url
+        @param string id
+        @param string secret
+        @param array header
+    */
+    public function getToken() {
+        $ch = curl_init();
+
+        $request_header = [
+            "Accept" => "application/json"
+        ];
+        
+       $options = [
+        CURLOPT_URL => $this->url,
+        CURLOPT_HTTPHEADER => $request_header,
+        CURLOPT_POSTFIELDS => $this->clientID,
+        CURLOPT_USERPWD => $this->secret
+       ];
+
+       curl_setopt_array($ch, $options);
+
+       if($ch === CURLE_OK) {
+            curl_exec($ch);
+       }
+
+       curl_close($ch);
+    }
+
+    public function setPayment()
+    {
+        
+    }
 }
-if(curl_exec($paypal) === false) {
-    echo json_encode([
-        "message" => "No se ejecuto el api"
-    ]);
-    exit;
-}
-
-curl_close($paypal);
