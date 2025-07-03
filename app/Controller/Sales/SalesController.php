@@ -18,16 +18,16 @@ class SalesController
         $this->sales = $sales;
     }
 
-    public function method_of_payment(Request $request, Response $response, array $data): Response
-    {
-        try {
+    // public function method_of_payment(Request $request, Response $response, array $data): Response
+    // {
+    //     try {
             
-        } catch(Exception $e) {
-            $response->getBody()->write(json_encode([
-                "message" => $e->getMessage(),
-                "status" => 500
-            ]));
-            return $response->withHeader("Content-Type", "application/json")->withStatus(500);
-        }
-    }
+    //     } catch(Exception $e) {
+    //         $response->getBody()->write(json_encode([
+    //             "message" => $e->getMessage(),
+    //             "status" => 500
+    //         ]));
+    //         return $response->withHeader("Content-Type", "application/json")->withStatus(500);
+    //     }
+    // }
 }

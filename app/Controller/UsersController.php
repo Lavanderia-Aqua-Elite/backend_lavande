@@ -1,83 +1,130 @@
-<?
+<?php
 declare(strict_types=1);
 
 namespace App\Controller;
 
 use Slim\Psr7\Response;
 use Slim\Psr7\Request;
-use Slim\Exception\HttpException;
-
 use App\Models\Client;
-use Exception;
+use App\Validator\Validator;
 
 class UsersController
 {
-    private Client $clientModels;
+    private Client $clientModel;
 
-    public function __construct(Client $clientModels)
+    public function __construct(Client $clientModel)
     {
-        $this->clientModels = $clientModels;
+        $this->clientModel = $clientModel;
     }
 
-    public function show(Request $request, Response $response): Response
+    /**
+     * Obtiene todos los usuarios
+     */
+    public function getAllUsers(Request $request, Response $response): Response
     {
-        try
-        {
-            $stmt = $this->clientModels->show();
+        try {
+            $users = $this->clientModel->show();
 
-            $response->getBody()->write(json_encode([
-                "items" => $stmt,
+            return $this->jsonResponse($response, [
+                "data" => $users,
+                "count" => count($users),
                 "status" => 200
-            ]));
-            return $response->withHeader("Content-Type", "application/json")->withStatus(200);
-        }
-        catch(HttpException $e)
-        {
-            $response->getBody()->write(json_encode([
+            ]);
+            
+        } catch (\Exception $e) {
+            return $this->jsonResponse($response, [
+                "error" => "Error al obtener usuarios",
                 "message" => $e->getMessage(),
                 "status" => 500
-            ]));
-            return $response->withHeader("Content-Type", "application/json")->withStatus(500);
+            ], 500);
         }
     }
 
-    public function update(Request $request, Response $response, int $id, array $data): Response
+    /**
+     * Actualiza un usuario
+     */
+    public function updateUser(Request $request, Response $response, array $args): Response
     {
-        try 
-        {
+        try {
+            $id = (int)($args['id'] ?? 0);
             $data = $request->getParsedBody();
-            $id = $request->getBody();
 
-            if(!empty($data["name"]) || !empty($data["lastname"])) {
-                $response->getBody()->write(json_encode([
-                    "message" => "Los datos no pasaron",
+            // Validar ID
+            if ($id <= 0) {
+                return $this->jsonResponse($response, [
+                    "error" => "ID inválido",
                     "status" => 400
-                ]));
-                return $response->withHeader("Content-Type", "application/json")->withStatus(400);
+                ], 400);
             }
 
-            if(!empty($id)) {
-                $response->getBody()->write(json_encode([
-                    "message" => "El ID no paso",
+            // Validar datos de entrada
+            $validator = new Validator();
+            $validationRules = [
+                'name' => 'required|alpha|max_len,50',
+                'lastname' => 'required|alpha|max_len,50',
+                'email' => 'required|valid_email'
+            ];
+
+            try {
+                $validatedData = $validator->validate($data ?? [], $validationRules);
+            } catch (\Exception $e) {
+                $errors = json_decode($e->getMessage(), true);
+                return $this->jsonResponse($response, [
+                    "error" => "Validación fallida",
+                    "errors" => $errors['validation_errors'] ?? $errors,
                     "status" => 400
-                ]));
-                return $response->withHeader("Content-Type", "application/json")->withStatus(400);
+                ], 400);
             }
 
-            $update = $this->clientModels->update($id, $data);
+            // Verificar si el usuario existe
+            $existingUser = $this->clientModel->getById($id);
+            if (!$existingUser) {
+                return $this->jsonResponse($response, [
+                    "error" => "Usuario no encontrado",
+                    "status" => 404
+                ], 404);
+            }
 
-            $response->getBody()->write(json_encode([
-                "items" => $update,
+            // Verificar email único
+            if (!empty($validatedData['email'])) {
+                $userWithEmail = $this->clientModel->getByEmail($validatedData['email']);
+                if ($userWithEmail && $userWithEmail['client_id'] != $id) {
+                    return $this->jsonResponse($response, [
+                        "error" => "El email ya está en uso",
+                        "status" => 400
+                    ], 400);
+                }
+            }
+
+            // Actualizar usuario
+            $success = $this->clientModel->update($id, $validatedData);
+            
+            if (!$success) {
+                throw new \Exception("No se pudo actualizar el usuario");
+            }
+
+            return $this->jsonResponse($response, [
+                "message" => "Usuario actualizado correctamente",
                 "status" => 200
-            ]));
-            return $response->withHeader("Content-Type", "application/json")->withStatus(200);
-        }
-        catch(HttpException $e) {
-            $response->getBody()->write(json_encode([
+            ]);
+            
+        } catch (\Exception $e) {
+            return $this->jsonResponse($response, [
+                "error" => "Error al actualizar usuario",
                 "message" => $e->getMessage(),
                 "status" => 500
-            ]));
-            return $response->withHeader("Content-Type", "application/json")->withStatus(500);
+            ], 500);
         }
+    }
+
+    /**
+     * Helper para respuestas JSON consistentes
+     */
+    private function jsonResponse(Response $response, array $data, int $statusCode = 200): Response
+    {
+        $response->getBody()->write(json_encode($data));
+        return $response
+            ->withHeader("Content-Type", "application/json")
+            ->withStatus($statusCode);
     }
 }

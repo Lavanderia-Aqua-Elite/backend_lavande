@@ -1,68 +1,185 @@
 <?php
 declare(strict_types=1);
 
-namespace app\Models;
+namespace App\Models;
 
-//PDO
 use PDO;
+use PDOException;
+use App\Hooks\RegisterHook;
+use App\Hooks\DeleteHook;
+use App\Hooks\UpdateHook;
+use App\Hooks\GetAllHook;
+use App\Hooks\ImageHook;
 
 class Services
 {
     private PDO $conn;
-    private static string $table = "services";
+    private RegisterHook $registerHook;
+    private DeleteHook $deleteHook;
+    private UpdateHook $updateHook;
+    private GetAllHook $getAllHook;
+    private ImageHook $imageHook;
+    
+    private static string $table = 'services';
+    private static string $primaryKey = 'id_service';
 
     public function __construct(PDO $conn)
     {
         $this->conn = $conn;
+        $this->registerHook = new RegisterHook($conn);
+        $this->deleteHook = new DeleteHook($conn);
+        $this->updateHook = new UpdateHook($conn);
+        $this->getAllHook = new GetAllHook($conn);
+        $this->imageHook = new ImageHook('uploads/services/');
     }
 
-    public function file_image($data): void
+    # GET ALL SERVICES
+    public function getAll(): array
     {
-        $alloewd_extensions_type = ["pgn", "jpg", "jpge"];
-        $route = __DIR__ . "/../Assets/img/";
+        return $this->getAllHook->getAll(self::$table);
+    }
 
-        foreach($_FILES["userfile"]["error"] as $key => $error) {
-            if($error === UPLOAD_ERR_OK) {
-                $tmp_name = $_FILES["userfile"]["tmp_name"][$key];
-                $name = $_FILES["userfile"]["name"][$key];
+    # INSERT SERVICE
+    public function insert(array $data): int
+    {
+        // Preparar datos básicos
+        $serviceData = [
+            'name_s' => $data['name_s'],
+            'price_s' => $data['price_s'],
+            'description_s' => $data['description_s']
+        ];
 
-                $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-
-                    // Validamos si la extensión es permitida
-                if (!in_array($extension, $alloewd_extensions_type)) {
-                    // Si no es válida, respondemos con error 400 (Bad Request)
-                    http_response_code(400);
-                    echo json_encode(["message" => "Tipo incorrecto de archivo: $name"]);
-                    continue; // saltamos este archivo y seguimos con el siguiente
-                }
-
-                // basename elimina cualquier ruta extraña para evitar ataques
-                $safe_name = basename($name);
-
-                // Construimos la ruta final donde se guardará el archivo
-                $destination = $route . $safe_name;
-
-                // Movemos el archivo desde la carpeta temporal a la carpeta final
-                if (!move_uploaded_file($tmp_name, $destination)) {
-                    // Si falla al mover, respondemos con error 500 (Internal Server Error)
-                    http_response_code(500);
-                    echo json_encode(["message" => "Error al guardar el archivo $safe_name"]);
-                }
-
+        // Manejar imagen si está presente
+        if (!empty($_FILES['image_s'])) {
+            $imageName = $this->imageHook->handleUpload($_FILES, 'image_s');
+            if ($imageName) {
+                $serviceData['image_s'] = $imageName;
             }
+        }
+
+        return $this->registerHook->register(self::$table, $serviceData);
+    }
+
+    # UPDATE SERVICE
+    public function update(int $id, array $data): bool
+    {
+        // Preparar datos básicos
+        $updateData = [
+            'name_s' => $data['name_s'],
+            'price_s' => $data['price_s'],
+            'description_s' => $data['description_s']
+        ];
+
+        // Manejar imagen si está presente
+        if (!empty($_FILES['image_s'])) {
+            $imageName = $this->imageHook->handleUpload($_FILES, 'image_s');
+            if ($imageName) {
+                $updateData['image_s'] = $imageName;
+                
+                // Eliminar imagen anterior si existe
+                $service = $this->getById($id);
+                if ($service && !empty($service['image_s'])) {
+                    $oldImagePath = 'uploads/services/' . $service['image_s'];
+                    if (file_exists($oldImagePath)) {
+                        unlink($oldImagePath);
+                    }
+                }
+            }
+        }
+
+        return $this->updateHook->update(
+            self::$table,
+            $updateData,
+            self::$primaryKey,
+            $id
+        );
+    }
+
+    # DELETE SERVICE
+    public function delete(int $id): bool
+    {
+        // Eliminar imagen asociada si existe
+        $service = $this->getById($id);
+        if ($service && !empty($service['image_s'])) {
+            $imagePath = 'uploads/services/' . $service['image_s'];
+            if (file_exists($imagePath)) {
+                unlink($imagePath);
+            }
+        }
+
+        return $this->deleteHook->delete(
+            self::$table,
+            self::$primaryKey,
+            $id
+        );
+    }
+
+    # GET SERVICE BY ID
+    public function getById(int $id): ?array
+    {
+        try {
+            $query = "SELECT * FROM lavanderia_app." . self::$table . " WHERE " . self::$primaryKey . " = ?";
+            $stmt = $this->conn->prepare($query);
+            $stmt->execute([$id]);
+            return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        } catch (PDOException $e) {
+            throw new \RuntimeException("Error al obtener servicio: " . $e->getMessage());
         }
     }
 
-    public function insert(array $data): int
+    # UPDATE SERVICE IMAGE ONLY
+    public function updateImage(int $id, array $fileData): bool
     {
-        $sql = "INSERT INTO lavanderia_app." . self::$table . " (name_s, price_s, image_s, description_s)
-            VALUES (?, ?, ?, ?)";
-        $stmt = $this->conn->prepare($sql);
-        $stmt->execute([
-            $data["name_s"],
-            $data["price_s"],
-            $data["description_s"]
-        ]);
-        return (int)$this->conn->lastInsertId();
+        $imageName = $this->imageHook->handleUpload($fileData, 'image_s');
+        if (!$imageName) {
+            throw new \RuntimeException('Error al subir la imagen');
+        }
+
+        // Eliminar imagen anterior si existe
+        $service = $this->getById($id);
+        if ($service && !empty($service['image_s'])) {
+            $oldImagePath = 'uploads/services/' . $service['image_s'];
+            if (file_exists($oldImagePath)) {
+                unlink($oldImagePath);
+            }
+        }
+
+        return $this->updateHook->update(
+            self::$table,
+            ['image_s' => $imageName],
+            self::$primaryKey,
+            $id
+        );
+    }
+
+    # GET SERVICES WITH FILTERS (OPCIONAL)
+    public function getFiltered(array $filters = []): array
+    {
+        try {
+            $query = "SELECT * FROM lavanderia_app." . self::$table . " WHERE 1=1";
+            $params = [];
+
+            if (!empty($filters['name'])) {
+                $query .= " AND name_s LIKE :name";
+                $params[':name'] = '%' . $filters['name'] . '%';
+            }
+
+            if (!empty($filters['min_price'])) {
+                $query .= " AND price_s >= :min_price";
+                $params[':min_price'] = $filters['min_price'];
+            }
+
+            if (!empty($filters['max_price'])) {
+                $query .= " AND price_s <= :max_price";
+                $params[':max_price'] = $filters['max_price'];
+            }
+
+            $stmt = $this->conn->prepare($query);
+            $stmt->execute($params);
+
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            throw new \RuntimeException("Error al obtener servicios filtrados: " . $e->getMessage());
+        }
     }
 }

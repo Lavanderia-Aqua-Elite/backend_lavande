@@ -1,16 +1,13 @@
 <?php
 declare(strict_types=1);
 
-namespace app\Hooks;
+namespace App\Hooks;
 
 use PDO;
 use PDOException;
 
 class RegisterHook
 {
-    private string $table;
-    private array $colums;
-    private array $data;
     private PDO $conn;
 
     public function __construct(PDO $conn)
@@ -18,16 +15,20 @@ class RegisterHook
         $this->conn = $conn;
     }
 
-    public function register(string $table, array $data, array $colums): int
+    public function register(string $table, array $data): int
     {
         try {
-            $sql = "INSERT INTO lavanderia.app.". $this->$table . " (". $this->$colums . ")" . " VALUES(". $this->$data . ")";
+            // Extraer columnas y placeholders
+            $columns = implode(', ', array_keys($data));
+            $placeholders = implode(', ', array_map(fn($key) => ':' . $key, array_keys($data)));
+
+            $sql = "INSERT INTO lavanderia.app.$table ($columns) VALUES ($placeholders)";
             $stmt = $this->conn->prepare($sql);
-            $stmt->execute([
 
-            ]);
+            // Ejecutar con bind automático
+            $stmt->execute($data);
 
-            return (int)$this->conn->lastInsertId(); 
+            return (int)$this->conn->lastInsertId();
         } catch(PDOException $e) {
             http_response_code(500);
             die(json_encode([

@@ -1,91 +1,168 @@
 <?php
 declare(strict_types=1);
 
-namespace app\Models;
+namespace App\Models;
 
-//PDO:
 use PDO;
+use PDOException;
+use App\Hooks\RegisterHook;
+use App\Hooks\DeleteHook;
+use App\Hooks\UpdateHook;
+use App\Hooks\GetAllHook;
+use App\Hooks\ImageHook;
 
 class Products
 {
     private PDO $conn;
+    private RegisterHook $registerHook;
+    private DeleteHook $deleteHook;
+    private UpdateHook $updateHook;
+    private GetAllHook $getAllHook;
+    private ImageHook $imageHook;
+    
+    private static string $table = 'products';
+    private static string $primaryKey = 'id_product';
 
     public function __construct(PDO $conn)
     {
         $this->conn = $conn;
+        $this->registerHook = new RegisterHook($conn);
+        $this->deleteHook = new DeleteHook($conn);
+        $this->updateHook = new UpdateHook($conn);
+        $this->getAllHook = new GetAllHook($conn);
+        $this->imageHook = new ImageHook('uploads/products/');
     }
 
-    #GET ALL
-    public function show(): void
+    # GET ALL PRODUCTS
+    public function show(): array
     {
-        $sql = "SELECT * FROM lavanderia_app.products";
-        $stmt = $this->conn->prepare($sql);
-        $stmt->fetchAll();
-        $stmt->execute();
+        return $this->getAllHook->getAll(self::$table);
     }
 
-    #INSERT
+    # INSERT PRODUCT
     public function register(array $data): int
     {
-    
-        $sql = "INSERT INTO lavanderia_app.products (nam_p, price_p, units_p, color_p, brand_p, nom_model_p, recommended_use, opinion_clients, size_p, commentary_p)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        $stmt = $this->conn->prepare($sql);
-        $stmt->execute([
-            $data["nam_p"],
-            $data["price_p"],
-            $data["units_p"],
-            $data["color_p"],
-            $data["brand_p"],
-            $data["nam_model"],
-            $data["recommended_use"],
-            $data["opinion_clients"],
-            $data["size_p"],
-            $data["commentary"]
-        ]);
-        
-        http_response_code(201);
-        return (int)$this->conn->lastInsertId();
+        // Preparar datos básicos
+        $productData = [
+            'nam_p' => $data['nam_p'],
+            'price_p' => $data['price_p'],
+            'units_p' => $data['units_p'],
+            'color_p' => $data['color_p'],
+            'brand_p' => $data['brand_p'],
+            'nam_model_p' => $data['nam_model'],
+            'recommended_use' => $data['recommended_use'],
+            'opinion_clients' => $data['opinion_clients'],
+            'size_p' => $data['size_p'],
+            'commentary_p' => $data['commentary']
+        ];
+
+        // Manejar imagen si está presente
+        if (!empty($_FILES['image'])) {
+            $imageName = $this->imageHook->handleUpload($_FILES, 'image');
+            if ($imageName) {
+                $productData['image'] = $imageName;
+            }
+        }
+
+        return $this->registerHook->register(self::$table, $productData);
     }
 
-    #UPDATE:
-    public function update(int $id, array $data): void
+    # UPDATE PRODUCT
+    public function update(int $id, array $data): bool
     {
-        $sql = "UPDATE nam_p = :name, 
-        price_p = :price, 
-        units_p = :units, 
-        color_p = :color, 
-        brand_p = :brand, 
-        nam_model_p = :nam_model, 
-        recommended_use = :recommended, 
-        opinion_clients = :opinion, 
-        size_p = :size, 
-        commentary_p = :commentary
-        WHERE id_product = :id_product";
+        // Preparar datos básicos
+        $updateData = [
+            'nam_p' => $data['nam_p'],
+            'price_p' => $data['price_p'],
+            'units_p' => $data['units_p'],
+            'color_p' => $data['color_p'],
+            'brand_p' => $data['brand_p'],
+            'nam_model_p' => $data['nam_model'],
+            'recommended_use' => $data['recommended_use'],
+            'opinion_clients' => $data['opinion_clients'],
+            'size_p' => $data['size_p'],
+            'commentary_p' => $data['commentary']
+        ];
 
-        $stmt = $this->conn->prepare($sql);
-        $stmt->execute([
-            $data["nam_p"] => ":name",
-            $data["price_p"] => ":price",
-            $data["units_p"] => ":units",
-            $data["color_p"] => ":color",
-            $data["brand_p"] => ":brand",
-            $data["nam_model"] => ":nam_model",
-            $data["recommended_use"] => ":recommended",
-            $data["opinion_clients"] => ":opinion",
-            $data["size_p"] => ":size",
-            $data["commentary"] => ":commentary",
-            $id => ":id_product"
-        ]);
+        // Manejar imagen si está presente
+        if (!empty($_FILES['image'])) {
+            $imageName = $this->imageHook->handleUpload($_FILES, 'image');
+            if ($imageName) {
+                $updateData['image'] = $imageName;
+                
+                // Eliminar imagen anterior si existe
+                $product = $this->getById($id);
+                if ($product && !empty($product['image'])) {
+                    $oldImagePath = 'uploads/products/' . $product['image'];
+                    if (file_exists($oldImagePath)) {
+                        unlink($oldImagePath);
+                    }
+                }
+            }
+        }
+
+        return $this->updateHook->update(
+            self::$table,
+            $updateData,
+            self::$primaryKey,
+            $id
+        );
     }
 
-    #DELETE
-    public function delete(int $id): void
+    # DELETE PRODUCT
+    public function delete(int $id): bool
     {
-        $sql = "DELETE FROM lavanderia_app.products WHERE id_product = :id_product";
-        $stmt = $this->conn->prepare($sql);
-        $stmt->execute([
-            $id => ":id_product"
-        ]);
+        // Eliminar imagen asociada si existe
+        $product = $this->getById($id);
+        if ($product && !empty($product['image'])) {
+            $imagePath = 'uploads/products/' . $product['image'];
+            if (file_exists($imagePath)) {
+                unlink($imagePath);
+            }
+        }
+
+        return $this->deleteHook->delete(
+            self::$table,
+            self::$primaryKey,
+            $id
+        );
+    }
+
+    # GET PRODUCT BY ID
+    public function getById(int $id): ?array
+    {
+        try {
+            $query = "SELECT * FROM lavanderia_app." . self::$table . " WHERE " . self::$primaryKey . " = ?";
+            $stmt = $this->conn->prepare($query);
+            $stmt->execute([$id]);
+            return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        } catch (PDOException $e) {
+            throw new \RuntimeException("Error al obtener producto: " . $e->getMessage());
+        }
+    }
+
+    # UPDATE PRODUCT IMAGE ONLY
+    public function updateImage(int $id, array $fileData): bool
+    {
+        $imageName = $this->imageHook->handleUpload($fileData, 'image');
+        if (!$imageName) {
+            throw new \RuntimeException('Error al subir la imagen');
+        }
+
+        // Eliminar imagen anterior si existe
+        $product = $this->getById($id);
+        if ($product && !empty($product['image'])) {
+            $oldImagePath = 'uploads/products/' . $product['image'];
+            if (file_exists($oldImagePath)) {
+                unlink($oldImagePath);
+            }
+        }
+
+        return $this->updateHook->update(
+            self::$table,
+            ['image' => $imageName],
+            self::$primaryKey,
+            $id
+        );
     }
 }
